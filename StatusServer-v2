@@ -1,0 +1,248 @@
+#!/bin/bash 
+#Variaveis
+Lsof="sudo lsof"
+NOW=`date +"%m-%d-%Y-%T"`
+#SSH=`sshpass -p '270777rC##' ssh $DOMINIO`
+# Variáveis de cor
+VERDE="\\e[1;32m"
+AZUL="\\e[1;36m"
+AMARELO="\\e[1;33m"
+VERMELHO="\\e[1;31m"
+NORMAL="\\e[0;39m"
+
+# Mensagens de ajuda 
+MsgUptime="Verifique se o servidor foi rebootado e identifique a causa. DMESG e MESSAGES podem auxiliar."
+MsgLoad="Verifique se há ataque e se o Fail2Ban está trabalhando corretamente. Comando: checa_fail2ban"
+MsgMem="Limpe o cache de memória ( sync && echo 3 > /proc/sys/vm/drop_caches ) e reinicie o NGinx, nginxctl restart"
+
+# Variáveis de uptime
+    UpTime=`cat /proc/uptime | grep -o '^[0-9]\+'`
+
+# Variáveis de memória
+    MemTotal=`free -m | grep Mem: | awk '{print $2}'`
+    MemLivre=`free -m | grep Mem: | awk '{print $4}'`
+    MemUso=`free -m | grep Mem: | awk '{print $3}'`
+    PercLivre10=`echo $[MemTotal * 10 / 100]`
+    PercLivre20=`echo $[MemTotal * 20 / 100]`
+    PercLivre30=`echo $[MemTotal * 30 / 100]`
+    PercLivre40=`echo $[MemTotal * 40 / 100]`
+
+# Variáveis de load 
+    LoadAverage=`sudo cat /proc/loadavg | awk '{print $1,$2,$3}'`
+    LoadCheck=`uptime | sed -e "s/^.*[a-z]: //; s/,.*//g" | cut -d"." -f1`
+
+# Variáveis de nº de conexões
+    Porta80=$(sudo netstat -tuplano | grep ":80" | awk '{print $5}' | sed -e "s/::ffff://g" | cut -d: -f1 | wc -l)
+    Ativ80=$(sudo  netstat -tuplano | grep ":80" | awk '{print $5}' | sed -e "s/::ffff://g" | cut -d: -f1 | sort | uniq | head -5)
+    Porta443=$(sudo netstat -tuplano | grep ":443" | awk '{print $5}' | sed -e "s/::ffff://g" | cut -d: -f1 | wc -l)
+    Ativ443=$(sudo netstat -tuplano | grep ":443" | awk '{print $5}' | sed -e "s/::ffff://g" | cut -d: -f1 | sort | uniq | head -5)
+    Porta3306=$(sudo netstat -tuplano | grep ":3306" | awk '{print $5}' | sed -e "s/::ffff://g" | cut -d: -f1  | wc -l)
+    Ativ3306=$(sudo netstat -tuplano | grep ":3306" | awk '{print $5}' | sed -e "s/::ffff://g" | cut -d: -f1 | sort | uniq | head -5)
+    Porta21=$(sudo netstat -tuplano | egrep ":21" | awk '{print $5}' | sed -e 's/::ffff://g' | cut -d: -f1 | sort | uniq -c | sort -nk1 | wc -l)
+    Ativ21=$(sudo netstat -tuplano | egrep ":21" | awk '{print $5}' | sed -e 's/::ffff://g' | cut -d: -f1 | sort | uniq -c | sort -nk1 | head -5)
+
+    clear 
+    echo " #############################################################"
+    echo " #########       Status do Servidor `hostname`        #########" 
+    echo " #############################################################"
+    echo
+
+    echo -n "Dia:               " 
+    date "+%d de %b de %Y" 
+    echo -n "Hora:              " 
+    date "+%H:%M:%S" 
+    echo
+
+    echo -n "Tempo online:          " 
+    sudo cat /proc/uptime |  perl -ne '/(\d*)/ ; printf "%02d:%02d:%02d:%02d\n",int($1/86400),int(($1%86400)/3600),int(($1%3600)/60),$1%60' 
+    if [ $UpTime -lt 600 ] ; then
+        echo -ne $VERMELHO 
+        echo "                Uptime menos que 10 minutos. :\\"
+        echo "***** $MsgUptime" 
+        else if [ $UpTime -lt 3600 ] ; then
+            echo -ne $AMARELO
+            echo "                Uptime menor que 1 hora. o.O"
+            echo "***** $MsgUptime" 
+            else if [ $UpTime -lt 7200 ] ; then
+                echo -ne $AZUL
+                echo "                Uptime menor que 2 horas. :|" 
+                else if [ $UpTime -gt 10800 ] ; then
+                    echo -ne $VERDE
+                    echo "              Uptime maior que 3 horas. 8D"
+                    fi
+                fi
+             fi
+    fi
+    echo -ne $NORMAL
+    echo
+
+    echo "Load Average:         $LoadAverage"
+    if [ $LoadCheck -ge 15 ] ; then
+        echo -ne $VERMELHO 
+        echo "                              Load acima de 15. X("
+        echo "***** $MsgLoad"  
+        else if [ $LoadCheck -lt 15 ] && [ $LoadCheck -ge 10 ] ; then
+            echo -ne $AMARELO
+            echo "                                  Load acima de 10. o.O"
+            echo "***** $MsgLoad"  
+            else if [ $LoadCheck -lt 10 ] && [ $LoadCheck -gt 5 ] ; then
+                echo -ne $AZUL
+                echo "                              Load acima de 5. :|" 
+                else if [ $LoadCheck -le 5 ] ; then
+                    echo -ne $VERDE
+                    echo "                                Load abaixo de 5. 8D"
+                    fi
+                fi
+             fi
+    fi
+
+    # EXIBE INFORMAÇÕES DE MEMÓRIA
+    echo -ne $NORMAL
+    echo
+    echo "Memória total:            $MemTotal MB" 
+    echo "Memória em uso:           $MemUso MB" 
+    echo "Memória livre:            $MemLivre MB"
+    if [ $MemLivre -lt $PercLivre10 ] ; then
+        echo -ne $VERMELHO 
+        echo "                              Sobrando menos de 10% de memória. X(" 
+        echo "***** $MsgMem"  
+        else if [ $MemLivre -lt $PercLivre20 ] ; then
+            echo -ne $AMARELO
+            echo "                                Sobrando menos de 20% de memória. o.O"
+            else if [ $MemLivre -lt $PercLivre30 ] ; then
+                echo -ne $AZUL
+                echo "                            Sobrando menos de 30% de memória. :|" 
+                else if [ $MemLivre -ge $PercLivre10 ] ; then
+                    echo -ne $VERDE
+                    echo "                              Sobrando mais de 40% de memória. 8D"
+                    fi
+                fi
+             fi
+    fi
+
+    # EXIBE INFORMAÇÕES DE USO DE DISCO
+    echo ""
+    echo -ne $NORMAL
+    echo "Uso de disco:"
+    df -h | tail -n+2 | rev | awk '{ if ( $2 != "" && $1 != "" ) print $2,$1}' | rev | column -t
+    
+    # EXIBE INFORMAÇÕES CONEXÕES EM PORTAS:
+    echo ""
+    echo -ne $NORMAL
+    echo -n "Conexões FTP:                   "
+    echo -ne $AMARELO
+    echo -n  $Porta21
+    echo ""
+    echo ""
+    echo -ne $NORMAL
+    echo -n "Conexões na porta 80:           " 
+    echo -ne $VERDE 
+    echo $Porta80 
+    echo ""
+    echo -ne $NORMAL
+    echo -n "Five List 80:                   "
+    echo -ne $AMARELO
+    echo $Ativ80
+    echo ""
+    echo -ne $NORMAL
+    echo -n "Conexões na porta 443:          "
+    echo -ne $AMARELO
+    echo $Porta443
+    echo ""
+    echo -ne $NORMAL
+    echo -n "Five List 443:                  "
+    echo -ne $AMARELO
+    echo $Ativ443
+    echo ""
+    echo -ne $NORMAL
+    echo -n "Conexões na porta 3306:         "
+    echo -ne $AMARELO
+    echo $Porta3306
+    echo ""
+    echo -ne $NORMAL
+    #echo -n "Five List 3306:         "
+    #echo -ne $AMARELO
+    #echo $Ativ33306
+    echo ""
+   # VERIFICA WEBSERVER / VERSAO WS / PHP / DOMINIOS 
+if [ "$($Lsof -i :80 | wc -l)" -ne "0" ] ; then
+    if [ "$($Lsof -i :80 | grep nginx |wc -l)" -gt 1 ] ; then
+        ### NGINX ###
+         echo "" 
+         echo -ne $AMARELO
+         # EXIBE INFO XMLRPC/ADMIN/LOGIN
+        echo ""
+        XMLRpc=$(sudo cat /var/log/nginx/access.log | egrep "wp-login|xmlrpc|admin" | grep POST | head -6| tr "[:upper:]" "[:lower:]" | awk '{printf $1 " " $2 ; printf " " ; printf system("geoiplookup -i \"" $2" \"  | egrep \"GeoIP Country Edition:|network:\" | head -2 | sed -e \"s/::/\\//g\" | tr \"\n\" \" \" | cut -d\" \"  -f4,14,17" )}' | sed -e "s/^0//g" -e "s/www\.//g" | sort | uniq -c | sort -nk1 | head -5)
+        echo -ne $NORMAL 
+        echo -n "Acesso XmlRpc\|admin\|login:    "
+        echo -ne $AMARELO
+        echo -n  $XMLRpc
+        echo ""
+        # EXIBE INFO ATTACK PYTHON REQUESTS
+        echo ""
+        echo -ne $NORMAL
+        echo -n "Ataque Python-Requests:                                    " 
+        echo ""
+        echo -ne $AMARELO
+        PyReq=$(sudo cat /var/log/nginx/access.log | grep -i "python-request"* | wc -l)
+            if [ PyReq != 0 ] ; 
+                then sudo cat /var/log/nginx/access.log | grep -i "python-request"* | awk '{print $1,$6,$7}' | sort | uniq | head -5 ;
+            else
+                echo "Não foi indentificado"
+            fi
+    else 
+        ### APACHE ###
+        # EXIBE INFO XMLRPC/ADMIN/LOGIN
+        echo ""
+        XMLRpc=$(sudo cat /var/log/httpd/access_log | egrep "wp-login|xmlrpc|admin" | grep POST | head -10 | tr "[:upper:]" "[:lower:]" | awk '{printf $1 " " $2 ; printf " " ; printf system("geoiplookup -i \"" $2" \"  | egrep \"GeoIP Country Edition:|network:\" | head -2 | sed -e \"s/::/\\//g\" | tr \"\n\" \" \" | cut -d\" \"  -f4,14,17" )}' | sed -e "s/^0//g" -e "s/www\.//g" | sort | uniq -c | sort -nk1 | head -5)
+        echo -ne $NORMAL 
+        echo -n "Acesso XmlRpc\|admin\|login:    "
+        echo -ne $AMARELO
+        echo -n  $XMLRpc
+        echo ""
+        # EXIBE INFO ATTACK PYTHON REQUESTS
+        echo ""
+        echo -ne $NORMAL
+        echo -n "Ataque Python-Requests:                                    " 
+        echo ""
+        echo -ne $AMARELO
+        PyReq=$(sudo cat /var/log/httpd/access_log | grep -i "python-request"* | wc -l)
+            if [ PyReq != 0 ] ; 
+                then sudo cat /var/log/httpd/access_log | grep -i "python-request"* | awk '{print $1,$2,$10}' | sort | uniq | head -5;
+            else
+                echo "Não foi indentificado"
+            fi
+    
+    fi;
+    echo
+    echo -ne $NORMAL
+else echo "Sem webserver." ; 
+fi
+
+if [ "$Porta21" -ne "0" ] ; then
+    if [ "$($Lsof -i :21 | grep vsftp |wc -l)" -gt 0 ] ; then
+         echo ""
+         echo -ne $NORMAL
+         echo "FTP Attacks: "
+         echo -ne $AMARELO
+        if [ $(sudo grep -i 'login incorrect' /var/log/{xferlog,vsftpd.log} 2> /dev/null| wc -l) != 0 ] ; 
+            then  sudo grep '530 Login incorrect.' /var/log/{xferlog,vsftpd.log} 2>/dev/null | awk '{print $8,$12}' | sed -e 's/\[//g' |sed -e 's/\]//g' | sort | uniq -c | sort -nk1 | head -5
+        else echo -ne $AMARELO
+             echo ""
+             echo "Não há erros no log de FTP"
+             echo ""
+        fi
+    else 
+        echo ""
+        echo -ne $AMARELO
+        #PROFTP
+        if [ $(sudo grep -i 'Incorrect password' "$(sudo grep -i 'systemlog' /etc/proftpd.conf  | awk '{print $2}')" | wc -l) != 0 ] ; 
+            then  sudo grep 'Incorrect password' "$(sudo grep -i 'systemlog' /etc/proftpd.conf  | awk '{print $2}')" | awk '{print $6,$9}' | sort | uniq -c | sort -nk1 | head -5
+        else echo -ne $VERMELHO
+             echo "Não há erros no log de FTP"
+        fi
+    fi
+else 
+    echo -ne $VERMELHO
+    echo -n "Sem servidor FTP." ; 
+fi
